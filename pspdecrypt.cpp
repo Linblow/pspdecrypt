@@ -19,7 +19,7 @@ static const u32 PBP_MAGIC  = 0x50425000;
 
 static const u32 MAX_PREIPL_SIZE = 0x1000;
 
-static int decryptAndDecompressPrx(u8 *out, const u8 *in, u32 inSize, bool verbose, bool decompPsp = true);
+static int decryptAndDecompressPrx(u8 *out, const u8 *in, u32 inSize, const u8 *secureId, bool verbose, bool decompPsp = true);
 
 void help(const char* exeName) {
     cout << "Usage: " << exeName << " [OPTION]... [FILE]" << endl;
@@ -28,23 +28,25 @@ void help(const char* exeName) {
     cout << "Can also take PBP files as an input, or IPL binaries if the option is given." << endl;
     cout << endl;
     cout << "General options:" << endl;
-    cout << "  -h, --help         display this help and exit" << endl;
-    cout << "  -v, --verbose      enable verbose mode (mostly for debugging)" << endl;
-    cout << "  -i, --info         display information about the input file and exit" << endl;
-    cout << "  -c, --no-decomp    do not decompress GZIP/KL4E/KL3E/2RLZ decrypted data" << endl;
+    cout << "  -h, --help          display this help and exit" << endl;
+    cout << "  -v, --verbose       enable verbose mode (mostly for debugging)" << endl;
+    cout << "  -i, --info          display information about the input file and exit" << endl;
+    cout << "  -c, --no-decomp     do not decompress GZIP/KL4E/KL3E/2RLZ decrypted data" << endl;
     cout << "PSP(/PBP)-only options:" << endl;
-    cout << "  -o, --outfile=FILE output file for the decrypted binary (default: [FILE.PSP].dec)" << endl;
+    cout << "  -o, --outfile=FILE  output file for the decrypted binary (default: [FILE.PSP].dec)" << endl;
+    cout << "  -s, --secureid=XSTR 16-bytes secure ID hex string (default: none)" << endl;
+    cout << "                      secure ID may only be used by PRX type 3/5/7/10" << endl;
     cout << "PSAR(/PBP)-only options:" << endl;
-    cout << "  -e, --extract-only do not decrypt files contained in the PSAR" << endl;
+    cout << "  -e, --extract-only  do not decrypt files contained in the PSAR" << endl;
     cout << "PBP-only options:" << endl;
-    cout << "  -P, --psp-only     only extract/decrypt the .PSP executable file of the PBP" << endl;
-    cout << "  -A, --psar-only    only extract/decrypt the .PSAR updater file of the PBP" << endl;
+    cout << "  -P, --psp-only      only extract/decrypt the .PSP executable file of the PBP" << endl;
+    cout << "  -A, --psar-only     only extract/decrypt the .PSAR updater file of the PBP" << endl;
     cout << "IPL decryption & PSAR(/PBP) options:" << endl;
-    cout << "  -O, --outdir=DIR   output path for the PSAR's or IPL's contents (default: [VER] if given [VER].PBP/PSAR)" << endl;
-    cout << "  -i, --ipl-decrypt  decrypt the IPL given as an argument" << endl;
-    cout << "  -V, --version=VER  the firmware version (eg 660) used for extracting the IPL stages" << endl;
-    cout << "  -p, --preipl       preipl image used for decrypting the later IPL stages" << endl;
-    cout << "  -k, --keep-all     also keep the intermediate .gz files of later stages" << endl;
+    cout << "  -O, --outdir=DIR    output path for the PSAR's or IPL's contents (default: [VER] if given [VER].PBP/PSAR)" << endl;
+    cout << "  -i, --ipl-decrypt   decrypt the IPL given as an argument" << endl;
+    cout << "  -V, --version=VER   the firmware version (eg 660) used for extracting the IPL stages" << endl;
+    cout << "  -p, --preipl        preipl image used for decrypting the later IPL stages" << endl;
+    cout << "  -k, --keep-all      also keep the intermediate .gz files of later stages" << endl;
 }
 
 int main(int argc, char *argv[]) {
@@ -53,6 +55,7 @@ int main(int argc, char *argv[]) {
         {"help",         no_argument,       0, 'h'},
         {"verbose",      no_argument,       0, 'v'},
         {"outfile",      required_argument, 0, 'o'},
+        {"secureid",     required_argument, 0, 's'},
         {"no-decomp",    no_argument,       0, 'c'},
         {"extract-only", no_argument,       0, 'e'},
         {"outdir",       required_argument, 0, 'O'},
@@ -71,6 +74,8 @@ int main(int argc, char *argv[]) {
     string outDir = "";
     string outFile = "";
     string preipl = "";
+    string xstr = "";
+    u8 secureId[16] = {0};  // optional for PRX type 3/5/7/10
     bool preiplSet = false;
     u8 preiplBuf[MAX_PREIPL_SIZE];
     u32 preiplSize = 0;
@@ -85,7 +90,7 @@ int main(int argc, char *argv[]) {
     int version = -1;
     int c = 0;
     cout << showbase << internal << setfill('0');
-    while ((c = getopt_long(argc, argv, "hvco:eO:ip:V:IAP", long_options, &long_index)) != -1) {
+    while ((c = getopt_long(argc, argv, "hvco:s:eO:ip:V:IAP", long_options, &long_index)) != -1) {
         switch (c) {
             case 'h':
                 help(argv[0]);
@@ -98,6 +103,13 @@ int main(int argc, char *argv[]) {
                 break;
             case 'o':
                 outFile = string(optarg);
+                break;
+            case 's':
+                xstr = string(optarg);
+                for (u32 i = 0, j = 0; i < xstr.length(); i += 2, j++) {
+                    string byteStr = xstr.substr(i, 2);
+                    secureId[j] = (u8)strtoul(byteStr.c_str(), NULL, 16);
+                }
                 break;
             case 'e':
                 extractOnly = true;
@@ -219,7 +231,7 @@ int main(int argc, char *argv[]) {
             }
             else {
                 u8 *outData = new u8[pspGetElfSize(inData)];
-                int outSize = decryptAndDecompressPrx(outData, inData, size, true, decompPsp);
+                int outSize = decryptAndDecompressPrx(outData, inData, pspGetPspSize(inData), secureId, true, decompPsp);
                 WriteFile(outFile.c_str(), outData, outSize);
                 delete[] outData;
             }
@@ -251,7 +263,7 @@ int main(int argc, char *argv[]) {
                         else {
                             cout << "Decrypting PSP file to " << outFile << endl;
                             u8 *outData = new u8[pspGetElfSize(&inData[pspOff])];
-                            int outSize = decryptAndDecompressPrx(outData, &inData[pspOff], psarOff - pspOff, true, decompPsp);
+                            int outSize = decryptAndDecompressPrx(outData, &inData[pspOff], pspGetPspSize(&inData[pspOff]), secureId, true, decompPsp);
                             WriteFile(outFile.c_str(), outData, outSize);
                             delete[] outData;
                         }
@@ -295,12 +307,12 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
-static int decryptAndDecompressPrx(u8 *out, const u8 *in, u32 inSize, bool verbose, bool decompPsp)
+static int decryptAndDecompressPrx(u8 *out, const u8 *in, u32 inSize, const u8 *secureId, bool verbose, bool decompPsp)
 {
     int elfSize, outSize;
 
     elfSize = pspGetElfSize(in);
-    outSize = pspDecryptPRX(in, out, inSize, nullptr, verbose);
+    outSize = pspDecryptPRX(in, out, inSize, secureId, verbose);
     if (outSize < 0) {
         return outSize;
     }
@@ -325,6 +337,5 @@ static int decryptAndDecompressPrx(u8 *out, const u8 *in, u32 inSize, bool verbo
             printf("Skipped data decompression\n");
         }
     }
-
     return outSize;
 }
