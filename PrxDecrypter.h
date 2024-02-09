@@ -68,4 +68,4 @@ typedef struct
 #pragma pack(pop)
 #endif
 
-int pspDecryptPRX(const u8 *inbuf, u8 *outbuf, u32 size, const u8 *seed = nullptr, bool verbose = false);
+int pspDecryptPRX(const u8 *inbuf, u8 *outbuf, u32 size, const u8 *secureId = nullptr, bool verbose = false);
