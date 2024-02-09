@@ -81,6 +81,13 @@ u32 pspGetTagVal(const u8 *buf);
 int pspGetElfSize(const u8 *buf);
 
 /**
+ * Get the size of the encrypted (possibly compressed first) ELF/PRX data + the PSP header structure.
+ * @param buf Pointer to the ~PSP header buffer (size >= 0x150 bytes)
+ * @return the PSP data size including header
+ */
+int pspGetPspSize(const u8 *buf);
+
+/**
  * Get the size of the decrypted module data (possibly compressed).
  * @param buf Pointer to the ~PSP header buffer (size >= 0x150 bytes)
  * @return the decrypted data size

@@ -332,6 +332,11 @@ int pspGetElfSize(const u8 *buf)
     return buf ? (int)*(u32_le *)&buf[0x28] : 0;
 }
 
+int pspGetPspSize(const u8 *buf)
+{
+    return buf ? (int)*(u32_le *)&buf[0x2C] : 0;
+}
+
 int pspGetCompSize(const u8 *buf)
 {
     return buf ? (int)*(u32_le *)&buf[0xB0] : 0;
