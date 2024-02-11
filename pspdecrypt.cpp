@@ -1,4 +1,5 @@
 #include <libgen.h>
+#include <algorithm>
 #include <cstdio>
 #include <iostream>
 #include <iomanip>
@@ -20,6 +21,17 @@ static const u32 PBP_MAGIC  = 0x50425000;
 static const u32 MAX_PREIPL_SIZE = 0x1000;
 
 static int decryptAndDecompressPrx(u8 *out, const u8 *in, u32 inSize, const u8 *secureId, bool verbose, bool decompPsp = true);
+
+/* Get the appropriate output buffer size for a decrypted & decompressed ~PSP file. */
+static size_t getPspOutputBufferCapacity(const u8 *psp)
+{
+    /* The output buffer capacity must be at least the size of the input data
+       because the input data will be copied to the output buffer first,
+       then it will be decrypted. */
+    u32 size = max(pspGetElfSize(psp), pspGetPspSize(psp));
+    /* Align it to the AES block size ie. 16 bytes. */
+    return ALIGN(size, 16);
+}
 
 void help(const char* exeName) {
     cout << "Usage: " << exeName << " [OPTION]... [FILE]" << endl;
@@ -230,7 +242,7 @@ int main(int argc, char *argv[]) {
                 return 1;
             }
             else {
-                u8 *outData = new u8[pspGetElfSize(inData)];
+                u8 *outData = new u8[getPspOutputBufferCapacity(inData)];
                 int outSize = decryptAndDecompressPrx(outData, inData, pspGetPspSize(inData), secureId, true, decompPsp);
                 WriteFile(outFile.c_str(), outData, outSize);
                 delete[] outData;
@@ -262,7 +274,7 @@ int main(int argc, char *argv[]) {
                         }
                         else {
                             cout << "Decrypting PSP file to " << outFile << endl;
-                            u8 *outData = new u8[pspGetElfSize(&inData[pspOff])];
+                            u8 *outData = new u8[getPspOutputBufferCapacity(inData)];
                             int outSize = decryptAndDecompressPrx(outData, &inData[pspOff], pspGetPspSize(&inData[pspOff]), secureId, true, decompPsp);
                             WriteFile(outFile.c_str(), outData, outSize);
                             delete[] outData;
