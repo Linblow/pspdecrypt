@@ -75,6 +75,49 @@ typedef struct
     u32 unk[13];
 } SceHeader; // size: 0x40
 
+/**
+ * PBP file data header.
+ * A PBP file is a simple concatenation of pre-determined files.
+ * All the structure members are Little-Endian.
+ * The size of an embedded file data is determined as follows:
+ *  size = file_offset[index + 1] - file_offset[index]
+ * Where index is the file index whose size you want.
+ * When the file index is 7:
+ *  size = pbp_file_size - file_offset[7]
+ * A size of zero means there is no file data.
+ */
+typedef struct
+{
+    /** PBP file header magic "\0PBP". */
+    u32_be magic; // 0x00
+    /** File header version. Always 0x00010000 (1.0) or 0x00010001 (1.1). */
+    u32_le version; // 0x04
+    union {
+        /* Data offset by file name. */
+        struct {
+            /** PARAM.SFO file data offset. */
+            u32_le off_param;      // 0x08
+            /** ICON0.PNG file data offset. */
+            u32_le off_icon0;      // 0x0c
+            /** ICON1.PNG / ICON1.PMF file data offset. */
+            u32_le off_icon1;      // 0x10
+            /** PIC0.PNG file data offset. */
+            u32_le off_pic0;       // 0x14
+            /** PIC1.PNG / PICT1.PNG file data offset. */
+            u32_le off_pic1;       // 0x18
+            /** SND0.AT3 file data offset. */
+            u32_le off_snd0;       // 0x1c
+            /** DATA.PSP file data offset. */
+            u32_le off_data_psp;   // 0x20
+            /** DATA.PSAR file data offset. */
+            u32_le off_data_psar;  // 0x24
+        };
+        /** File data offset by index. */
+        u32_le file_offset[8];
+    };
+    /* The embedded files data follows this structure. */
+} ScePBPHeader; // size: 0x28
+
 #ifdef _MSC_VER
 #pragma pack(pop)
 #endif

@@ -25,7 +25,7 @@ static const u32 PUPK_MAGIC = 0x5055504B; /* PUPK */
 
 static const u32 MAX_PREIPL_SIZE = 0x1000;
 
-static void checkSkipSceHeader(u8 **ppInData, u32 size);
+static void checkSkipSceHeader(u8 **ppInData, u32 size, u32 offset = 0);
 static int decryptAndDecompressPrx(u8 *out, const u8 *in, u32 inSize, const u8 *secureId, bool verbose, bool decompPsp = true);
 
 static inline u32 readMagic(const void *buf)
@@ -49,6 +49,7 @@ void help(const char* exeName) {
     cout << endl;
     cout << "Decrypts encrypted PSP binaries (.PSP) or updaters (.PSAR)." << endl;
     cout << "Can also take PBP files as an input, or IPL binaries if the option is given." << endl;
+    cout << "Skips SCE/PUPK header for ~PSP/PBP files, if any." << endl;
     cout << endl;
     cout << "General options:" << endl;
     cout << "  -h, --help          display this help and exit" << endl;
@@ -245,6 +246,8 @@ int main(int argc, char *argv[]) {
         cout << "Decrypting standalone IPL" << logStr << endl;
     }
     else {
+        u32 pbpOff = 0;
+        ScePBPHeader *pbp = nullptr;
         checkSkipSceHeader(&pInData, size);
         switch (readMagic(pInData)) {
         case PSP_MAGIC:
@@ -262,15 +265,22 @@ int main(int argc, char *argv[]) {
                 delete[] outData;
             }
             break;
+        case PUPK_MAGIC:
+            /* Advance the input data pointer to the start of the PBP file data. */
+            pbpOff = (u32)(*(u32_le*)&inData[0xc]) + 0x18;
+            pInData += pbpOff;
+            size -= pbpOff;
+            [[fallthrough]];
         case PBP_MAGIC:
             {
-                u32 pspOff = (u32)*(u32_le*)&pInData[0x20];
-                u32 psarOff = (u32)*(u32_le*)&pInData[0x24];
+                pbp = (ScePBPHeader *)pInData;
+                u32 pspOff = pbp->off_data_psp;
+                u32 psarOff = pbp->off_data_psar;
                 if (infoOnly) {
                     cout << "Input is a PBP with:" << endl;
                 }
                 if (pspOff < size && !psarOnly) {
-                    checkSkipSceHeader(&pInData, size);
+                    checkSkipSceHeader(&pInData, size, pspOff);
                     if (readMagic(&pInData[pspOff]) == ELF_MAGIC) {
                         if (infoOnly) {
                             cout << "- an unencrypted PSP (ELF) file" << endl;
@@ -334,9 +344,9 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
-static void checkSkipSceHeader(u8 **ppInData, u32 size)
+static void checkSkipSceHeader(u8 **ppInData, u32 size, u32 offset)
 {
-    const SceHeader *hdr = (const SceHeader *)*ppInData;
+    const SceHeader *hdr = (const SceHeader *)(&(*ppInData)[offset]);
     /* Skip the useless SCE header, if any. */
     if (hdr->magic == SCE_MAGIC) {
         if (hdr->size < sizeof(SceHeader)) {
