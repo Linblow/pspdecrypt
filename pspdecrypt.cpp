@@ -299,7 +299,7 @@ int main(int argc, char *argv[]) {
                         }
                         else {
                             cout << "Decrypting PSP file to " << outFile << endl;
-                            u8 *outData = new u8[getPspOutputBufferCapacity(pInData)];
+                            u8 *outData = new u8[getPspOutputBufferCapacity(&pInData[pspOff])];
                             int outSize = decryptAndDecompressPrx(outData, &pInData[pspOff], pspGetPspSize(&pInData[pspOff]), secureId, true, decompPsp);
                             WriteFile(outFile.c_str(), outData, outSize);
                             delete[] outData;
