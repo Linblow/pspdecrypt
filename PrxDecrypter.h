@@ -64,6 +64,17 @@ typedef struct
 } __attribute__((packed)) PSP_Header;
 #endif
 
+typedef struct
+{
+    /** Magic "~SCE" */
+    u32_be magic;
+    /** Size of this header + additional data (if any). Typically 0x40 */
+    u32_le size;
+    /** SCE header verison number. */
+    u32_le version;
+    u32 unk[13];
+} SceHeader; // size: 0x40
+
 #ifdef _MSC_VER
 #pragma pack(pop)
 #endif
