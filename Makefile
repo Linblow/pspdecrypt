@@ -17,3 +17,5 @@ $(BIN): $(OBJS)
 .PHONY: clean
 clean:
 	-rm -f $(BIN) $(OBJS)
+
+rebuild: clean all
