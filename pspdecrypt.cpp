@@ -11,16 +11,25 @@
 #include "PrxDecrypter.h"
 #include "pspdecrypt_lib.h"
 #include "common.h"
+#include "Swap.h"
 
 using namespace std;
-static const u32 ELF_MAGIC  = 0x464C457F;
-static const u32 PSP_MAGIC  = 0x5053507E;
-static const u32 PSAR_MAGIC = 0x52415350;
-static const u32 PBP_MAGIC  = 0x50425000;
+
+/* Magic numbers in Big-Endian. */
+static const u32 ELF_MAGIC  = 0x7F454C46; /* \x7fELF */
+static const u32 SCE_MAGIC  = 0x7E534345; /* ~SCE */
+static const u32 PSP_MAGIC  = 0x7E505350; /* ~PSP */
+static const u32 PSAR_MAGIC = 0x50534152; /* PSAR */
+static const u32 PBP_MAGIC  = 0x00504250; /* \0PBP */
 
 static const u32 MAX_PREIPL_SIZE = 0x1000;
 
 static int decryptAndDecompressPrx(u8 *out, const u8 *in, u32 inSize, const u8 *secureId, bool verbose, bool decompPsp = true);
+
+static inline u32 readMagic(const void *buf)
+{
+    return (u32)(*(u32_be *)buf);
+}
 
 /* Get the appropriate output buffer size for a decrypted & decompressed ~PSP file. */
 static size_t getPspOutputBufferCapacity(const u8 *psp)
@@ -232,7 +241,7 @@ int main(int argc, char *argv[]) {
         cout << "Decrypting standalone IPL" << logStr << endl;
     }
     else {
-        switch (*(u32*)inData) {
+        switch (readMagic(inData)) {
         case PSP_MAGIC:
             if (infoOnly) {
                 cout << "Input is an encrypted PSP executable encrypted with tag " << hex << setw(8) << pspGetTagVal(inData) << endl;
@@ -250,13 +259,13 @@ int main(int argc, char *argv[]) {
             break;
         case PBP_MAGIC:
             {
-                u32 pspOff = *(u32*)&inData[0x20];
-                u32 psarOff = *(u32*)&inData[0x24];
+                u32 pspOff = (u32)*(u32_le*)&inData[0x20];
+                u32 psarOff = (u32)*(u32_le*)&inData[0x24];
                 if (infoOnly) {
                     cout << "Input is a PBP with:" << endl;
                 }
                 if (pspOff < size && !psarOnly) {
-                    if (*(u32*)&inData[pspOff] == ELF_MAGIC) {
+                    if (readMagic(&inData[pspOff]) == ELF_MAGIC) {
                         if (infoOnly) {
                             cout << "- an unencrypted PSP (ELF) file" << endl;
                         } else {
@@ -264,7 +273,7 @@ int main(int argc, char *argv[]) {
                             WriteFile(outFile.c_str(), &inData[pspOff], psarOff - pspOff);
                         }
                     }
-                    else if (*(u32*)&inData[pspOff] == PSP_MAGIC) {
+                    else if (readMagic(&inData[pspOff]) == PSP_MAGIC) {
                         if (infoOnly) {
                             cout << "- an encrypted PSP executable encrypted with tag " << hex << setw(8) << pspGetTagVal(&inData[pspOff]) << endl;
                         }
